@@ -5,7 +5,7 @@
 This is the FingerPrint Sample for the android. There are many sample available online.
 This sample particulary focus on how to encrypt/decrypt data while using fingerprint for the login functionality.
 Few notes here :-
-  - Currently storing password in the sharedPref, but this only for the demo purpose. Never do that in live prod applications.
+  - Currently storing password in the sharedPref, but this is only for the demo purpose. Never do that in live prod applications.
   - Using dialog to get the fingerPrint, this is similar to the one used in Google sample Demo.
   - setUserAuthenticationRequired while building the key is set to false, in this demo. Do read about it!!!!
  
