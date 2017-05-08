@@ -25,6 +25,7 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 
 import javax.crypto.BadPaddingException;
@@ -33,6 +34,7 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 
 public class MainActivity extends AppCompatActivity implements LoginView {
 
@@ -201,20 +203,33 @@ public class MainActivity extends AppCompatActivity implements LoginView {
             Cipher cipher = Cipher.getInstance(KeyProperties.KEY_ALGORITHM_AES + "/"
                     + KeyProperties.BLOCK_MODE_CBC + "/"
                     + KeyProperties.ENCRYPTION_PADDING_PKCS7);
-
-            cipher.init(cipherMode, secretKey);
+            SecretKey secretKey = (SecretKey) keyStore.getKey(KEY_NAME, null);
+            if (cipherMode == Cipher.ENCRYPT_MODE) {
+                cipher.init(cipherMode, secretKey);
+                byte[] encryptionIv = cipher.getIV();
+                editor = prefs.edit();
+                editor.putString("encryptionIv", Base64.encodeToString(encryptionIv, Base64.DEFAULT));
+                editor.apply();
+            } else {
+                String base64EncryptionIv = prefs.getString("encryptionIv", null);
+                byte[] encryptionIv = Base64.decode(base64EncryptionIv, Base64.DEFAULT);
+                cipher.init(cipherMode, secretKey, new IvParameterSpec(encryptionIv));
+            }
             return cipher;
         } catch (NoSuchAlgorithmException | NoSuchPaddingException
-                | InvalidKeyException e) {
+                | InvalidKeyException | UnrecoverableKeyException | KeyStoreException | InvalidAlgorithmParameterException e) {
             throw new FingerPrintException("Exception in generating Cipher");
         }
-
     }
 
     public void beginSignInWithFingerTouch(boolean authentication) {
-        Intent intent = new Intent(MainActivity.this, SecondActivity.class);
-        intent.putExtra(EXTRA_KEY_TOUCH_ID, touchIdToggle.isChecked());
-        startActivity(intent);
+
+        if (authentication) {
+            beginLoginProcess();
+        } else {
+            mockLoginHelper.presentFailureView();
+        }
+
     }
 
 
@@ -250,6 +265,20 @@ public class MainActivity extends AppCompatActivity implements LoginView {
 
     @Override
     public void loginFail() {
+        screenText.setText("Authentication Failure!!!!");
+    }
 
+    public void beginLoginProcess() {
+        try {
+            Cipher cipher = generateCipher(Cipher.DECRYPT_MODE);
+            String base64EncryptedPassword = prefs.getString("password", null);
+            byte[] encryptedPassword = Base64.decode(base64EncryptedPassword, Base64.DEFAULT);
+            byte[] passwordBytes = cipher.doFinal(encryptedPassword);
+            String password = new String(passwordBytes, CHARSET_NAME);
+            Toast.makeText(this, password + " got ", Toast.LENGTH_SHORT).show();
+            mockLoginHelper.callLoginService("UserName", password);
+        } catch (FingerPrintException | BadPaddingException | UnsupportedEncodingException | IllegalBlockSizeException e) {
+            e.printStackTrace();
+        }
     }
 }
