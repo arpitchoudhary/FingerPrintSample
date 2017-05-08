@@ -88,13 +88,13 @@ public class FingerPrintDialogHelper extends DialogFragment implements FingerPri
 
     @Override
     public void onAuthenticated() {
-        activity.beginEncryption(true);
+        activity.beginEncryption();
         dismiss();
     }
 
     @Override
     public void onAuthenticationFailed() {
-        activity.beginEncryption(false);
+        activity.beginEncryption();
         dismiss();
     }
 }

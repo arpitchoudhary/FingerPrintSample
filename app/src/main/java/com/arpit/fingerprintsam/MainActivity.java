@@ -18,13 +18,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 
 import javax.crypto.BadPaddingException;
@@ -37,12 +37,11 @@ import javax.crypto.SecretKey;
 public class MainActivity extends AppCompatActivity implements LoginView {
 
     private static final String TOUCH_ID_OPTED = "TOUCH_ID_OPTED";
+    public static final String CHARSET_NAME = "UTF-8";
     private KeyguardManager keyguardManager;
     private FingerprintManager fingerprintManager;
     private KeyStore keyStore;
-    private FingerprintManager.CryptoObject cryptoObject;
     private final String KEY_NAME = "Finger_key";
-    private static final String SECRET_MESSAGE = "Very secret message";
     public static final String EXTRA_KEY_TOUCH_ID = "EXTRA_KEY_TOUCH_ID";
 
     private Button loginButton;
@@ -54,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements LoginView {
     private SharedPreferences.Editor editor;
 
     private String pwd;
+    private SecretKey secretKey;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,9 +80,7 @@ public class MainActivity extends AppCompatActivity implements LoginView {
                 if (!checkForFingerPrintSupport()) {
                     loginButton.setEnabled(false);
                 } else {
-                    generateKey();
-                    Cipher cipher = generateCipher(Cipher.ENCRYPT_MODE);
-                    cryptoObject = new FingerprintManager.CryptoObject(cipher);
+                    secretKey = generateKey();
                 }
             }
         } catch (FingerPrintException e) {
@@ -98,7 +96,7 @@ public class MainActivity extends AppCompatActivity implements LoginView {
                     // launch the dialog fragment for the touch id
                     FingerPrintDialogHelper dialogHelper = new FingerPrintDialogHelper();
                     dialogHelper.setFingerPrintManager(fingerprintManager);
-                    dialogHelper.setCryptoObject(cryptoObject);
+                    dialogHelper.setCryptoObject(null);
                     dialogHelper.show(getSupportFragmentManager(), "FingerPrintDialogHelper");
                 } else {
                     getLoginDetailsFromScreen();
@@ -160,7 +158,7 @@ public class MainActivity extends AppCompatActivity implements LoginView {
      * Now we need to have a method which get the access to android keystore and generate the key
      * this key will then be used for encryption and decryption
      */
-    public void generateKey() throws FingerPrintException {
+    public SecretKey generateKey() throws FingerPrintException {
 
         KeyGenerator keyGenerator = null;
         try {
@@ -180,10 +178,10 @@ public class MainActivity extends AppCompatActivity implements LoginView {
                     .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
                     // Require the user to authenticate with a fingerprint to authorize every use
                     // of the key
-                    .setUserAuthenticationRequired(true)
+                    .setUserAuthenticationRequired(false)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7);
             keyGenerator.init(builder.build());
-            keyGenerator.generateKey();
+            return keyGenerator.generateKey();
 
         } catch (KeyStoreException | NoSuchAlgorithmException | NoSuchProviderException |
                 CertificateException | IOException | InvalidAlgorithmParameterException e) {
@@ -204,43 +202,50 @@ public class MainActivity extends AppCompatActivity implements LoginView {
                     + KeyProperties.BLOCK_MODE_CBC + "/"
                     + KeyProperties.ENCRYPTION_PADDING_PKCS7);
 
-            keyStore.load(null);
-            SecretKey key = (SecretKey) keyStore.getKey(KEY_NAME, null);
-            cipher.init(cipherMode, key);
+            cipher.init(cipherMode, secretKey);
             return cipher;
         } catch (NoSuchAlgorithmException | NoSuchPaddingException
-                | UnrecoverableKeyException | KeyStoreException | InvalidKeyException | CertificateException | IOException e) {
+                | InvalidKeyException e) {
             throw new FingerPrintException("Exception in generating Cipher");
         }
 
     }
 
-    public void beginEncryption(boolean isEncryptionEnabled) {
-        if (isEncryptionEnabled) {
-            try {
-                byte[] encrypted = cryptoObject.getCipher().doFinal(pwd.getBytes());
-                screenText.setText(Base64.encodeToString(encrypted, 0 /* flags */));
-            } catch (BadPaddingException | IllegalBlockSizeException e) {
-                screenText.setText("encryption failed!!!");
-            }
-        } else {
-            screenText.setText("AuthenticationFailed");
-        }
+    public void beginEncryption() {
+        Intent intent = new Intent(MainActivity.this, SecondActivity.class);
+        intent.putExtra(EXTRA_KEY_TOUCH_ID, touchIdToggle.isChecked());
+        startActivity(intent);
     }
 
 
     @Override
     public void updateSuccessfulLoginSetup() {
         if (touchIdToggle.isChecked()) {
-            editor = prefs.edit();
-            editor.putBoolean(TOUCH_ID_OPTED, true);
-            editor.apply();
+            saveCredential();
         }
 
         Intent intent = new Intent(MainActivity.this, SecondActivity.class);
         intent.putExtra(EXTRA_KEY_TOUCH_ID, touchIdToggle.isChecked());
         startActivity(intent);
 
+    }
+
+    private void saveCredential() {
+        try {
+
+            Cipher cipher = generateCipher(Cipher.ENCRYPT_MODE);
+            byte[] passwordBytes = pwd.getBytes(CHARSET_NAME);
+            byte[] encryptedPasswordBytes = cipher.doFinal(passwordBytes);
+            String encryptedPassword = Base64.encodeToString(encryptedPasswordBytes, Base64.DEFAULT);
+
+            editor = prefs.edit();
+            editor.putBoolean(TOUCH_ID_OPTED, true);
+            editor.putString("password", encryptedPassword);
+            editor.apply();
+
+        } catch (FingerPrintException | BadPaddingException | UnsupportedEncodingException | IllegalBlockSizeException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
