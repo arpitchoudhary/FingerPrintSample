@@ -211,7 +211,7 @@ public class MainActivity extends AppCompatActivity implements LoginView {
 
     }
 
-    public void beginEncryption() {
+    public void beginSignInWithFingerTouch(boolean authentication) {
         Intent intent = new Intent(MainActivity.this, SecondActivity.class);
         intent.putExtra(EXTRA_KEY_TOUCH_ID, touchIdToggle.isChecked());
         startActivity(intent);
